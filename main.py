@@ -1,11 +1,46 @@
-
 import pandas as pd
+from summa import keywords
+import nltk
+from nltk.stem import PorterStemmer
+
+ps = PorterStemmer()
+
+
+pd.set_option('display.max_colwidth', None)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
 
 data = pd.read_csv('Social_Media_Engagement_Dataset.csv')
 
-print(data[['text_content', 'timestamp']])
+#print(data[['text_content', 'timestamp']])
+
+data = data[['timestamp', 'day_of_week', 'location', 'text_content', 'engagement_rate']].head(4)
+
+data['text_content'] = data['text_content'].str.replace(r'[^A-Za-z0-9\s]', '', regex=True)
+data['text_content'] = data['text_content'].str.lower()
 
 data = data.sort_values(by=['timestamp'])
 
-print(data[['text_content', 'timestamp']])
+def extract_keywords(text):
+    if pd.isna(text) or not str(text).strip():
+        return ''
+    try:
+        return keywords.keywords(str(text), words=3)
+    except Exception:
+        return ''
+
+def stemming(keywords):
+  #print(type(keyword))
+  keywords.split(' ')
+  for keyword in keywords:
+    keyword = ps.stem(keyword)
+    print(keyword)
+
+
+data['keywords'] = data['text_content'].apply(extract_keywords) #borde vara array av stringar
+
+data['keywords'] = data['keywords'].apply(stemming)
+
+#print(data[['keywords']])
 
