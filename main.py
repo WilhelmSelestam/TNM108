@@ -32,7 +32,7 @@ def extract_keywords(text):
     except Exception:
         return ''
 
-def stemming(keywords):
+def lemming(keywords):
   #print(type(keyword))
   tokens = keywords.replace('\n',' ').split()
   #keywords.split(' ')
@@ -56,6 +56,6 @@ for d in doc:
 
 data['keywords'] = data['text_content'].apply(extract_keywords) #borde vara array av stringar
 
-data['keywords'] = data['keywords'].apply(stemming)
+data['keywords'] = data['keywords'].apply(lemming)
 
 print(data['keywords'])
