@@ -32,15 +32,17 @@ def extract_keywords(text):
 
 def stemming(keywords):
   #print(type(keyword))
-  keywords.split(' ')
-  for keyword in keywords:
-    keyword = ps.stem(keyword)
-    print(keyword)
+  tokens = keywords.replace('\n',' ').split()
+  #keywords.split(' ')
+  stems = [ps.stem(token)for token in tokens]
+  print(stems)
 
+  return stems
+
+print(ps.stem('ran'))
 
 data['keywords'] = data['text_content'].apply(extract_keywords) #borde vara array av stringar
 
 data['keywords'] = data['keywords'].apply(stemming)
 
-#print(data[['keywords']])
-
+print(data['keywords'])
