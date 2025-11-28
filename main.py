@@ -3,6 +3,9 @@ from summa import keywords
 import nltk
 from nltk.stem import PorterStemmer
 import spacy
+from datetime import datetime, timedelta
+import math
+
 
 ps = PorterStemmer()
 
@@ -22,7 +25,13 @@ data = data[['timestamp', 'day_of_week', 'location', 'text_content', 'engagement
 data['text_content'] = data['text_content'].str.replace(r'[^A-Za-z0-9\s]', '', regex=True)
 data['text_content'] = data['text_content'].str.lower()
 
+
+#date format things
+date_format = '%Y-%m-%d %H:%M:%S'
+
 data = data.sort_values(by=['timestamp'])
+print(datetime.strptime(data['timestamp'][0],date_format))
+
 
 def extract_keywords(text):
     if pd.isna(text) or not str(text).strip():
@@ -59,3 +68,36 @@ data['keywords'] = data['text_content'].apply(extract_keywords) #borde vara arra
 data['keywords'] = data['keywords'].apply(lemming)
 
 print(data['keywords'])
+
+firsTimeInBin = datetime.strptime(data['timestamp'][0], date_format)
+
+timeSeries = []
+topicSeries = [[]]
+
+
+start_time = datetime.strptime(data['timestamp'][0], date_format)
+end_time = datetime.strptime(data['timestamp'].iloc[-1], date_format)
+
+time_span = end_time - start_time
+
+nr_of_weeks = math.ceil(time_span.days / 7)
+
+print(nr_of_weeks)
+
+current_week = 0
+week_length = timedelta(days=7)
+
+for row in data.itertuples(index=False):
+
+    current_date = datetime.strptime(row.timestamp, date_format)
+    print()  
+
+    if current_date < start_time + week_length * (current_week + 1):
+        topicSeries[current_week].append(row)
+    else:
+        current_week += 1
+        topicSeries.append([row])
+
+
+
+
