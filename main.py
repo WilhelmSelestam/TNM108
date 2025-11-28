@@ -5,6 +5,7 @@ from nltk.stem import PorterStemmer
 import spacy
 from datetime import datetime, timedelta
 import math
+from sentence_transformers import SentenceTransformer, util
 
 
 ps = PorterStemmer()
@@ -69,6 +70,10 @@ data['keywords'] = data['keywords'].apply(lemming)
 
 print(data['keywords'])
 
+#embedding
+
+
+#week bins
 firsTimeInBin = datetime.strptime(data['timestamp'].iloc[0], date_format)
 
 timeSeries = []
