@@ -20,7 +20,7 @@ data = pd.read_csv('Social_Media_Engagement_Dataset.csv')
 
 #print(data[['text_content', 'timestamp']])
 
-data = data[['timestamp', 'day_of_week', 'location', 'text_content', 'engagement_rate']].head(20)
+data = data[['timestamp', 'day_of_week', 'location', 'text_content', 'engagement_rate']].head(2000)
 
 data['text_content'] = data['text_content'].str.replace(r'[^A-Za-z0-9\s]', '', regex=True)
 data['text_content'] = data['text_content'].str.lower()
@@ -29,8 +29,8 @@ data['text_content'] = data['text_content'].str.lower()
 #date format things
 date_format = '%Y-%m-%d %H:%M:%S'
 
-data = data.sort_values(by=['timestamp'])
-print(datetime.strptime(data['timestamp'][0],date_format))
+data = data.sort_values(by=['timestamp']).head(20)
+print(datetime.strptime(data['timestamp'].iloc[0],date_format))
 
 
 def extract_keywords(text):
@@ -69,18 +69,21 @@ data['keywords'] = data['keywords'].apply(lemming)
 
 print(data['keywords'])
 
-firsTimeInBin = datetime.strptime(data['timestamp'][0], date_format)
+firsTimeInBin = datetime.strptime(data['timestamp'].iloc[0], date_format)
 
 timeSeries = []
-topicSeries = [[]]
+topicSeries = [{}]
 
 
-start_time = datetime.strptime(data['timestamp'][0], date_format)
+start_time = datetime.strptime(data['timestamp'].iloc[0], date_format)
 end_time = datetime.strptime(data['timestamp'].iloc[-1], date_format)
 
 time_span = end_time - start_time
 
 nr_of_weeks = math.ceil(time_span.days / 7)
+
+for week in range (0, nr_of_weeks - 1):
+    topicSeries.append({})
 
 print(nr_of_weeks)
 
@@ -90,14 +93,20 @@ week_length = timedelta(days=7)
 for row in data.itertuples(index=False):
 
     current_date = datetime.strptime(row.timestamp, date_format)
-    print()  
+    #print()  
 
     if current_date < start_time + week_length * (current_week + 1):
-        topicSeries[current_week].append(row)
+        for keyword in row.keywords:
+            topicSeries[current_week][keyword] = topicSeries[current_week].get(keyword, 0) + 1
+        #topicSeries[current_week].append(row)
+        
     else:
         current_week += 1
-        topicSeries.append([row])
+        #topicSeries.append([row])
+        for keyword in row.keywords:
+            topicSeries[current_week][keyword] = topicSeries[current_week].get(keyword, 0) + 1
 
 
 
+print(topicSeries)
 
