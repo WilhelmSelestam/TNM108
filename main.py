@@ -1,11 +1,14 @@
 import pandas as pd
-from summa import keywords
-import nltk
-from nltk.stem import PorterStemmer
-import spacy
+# from summa import keywords
+# import nltk
+#from nltk.stem import PorterStemmer
+#import spacy
 from datetime import datetime, timedelta
 import math
-from sentence_transformers import SentenceTransformer, util
+#from sentence_transformers import SentenceTransformer, util
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.signal import find_peaks
 
 #nlp = spacy.load("en_core_web_sm")
 
@@ -14,7 +17,7 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
-data = pd.read_csv('data.csv').head(35)
+data = pd.read_csv('data.csv')
 
 #date format things
 date_format = '%Y-%m-%d %H:%M:%S'
@@ -46,10 +49,9 @@ date_format = '%Y-%m-%d %H:%M:%S'
 # )
 
 # print(clusters)
-
 # filtered_keywords = [keywords[cluster[0]] for cluster in clusters]
-
 # print(filtered_keywords)
+
 
 timeSeries = []
 topicSeries = [{}]
@@ -85,7 +87,7 @@ for row in data.itertuples(index=False):
         for keyword in keywords2:
             topicSeries[current_week][keyword] = topicSeries[current_week].get(keyword, 0) + 1
             #topicSeries[current_week].append(row)
-            print(keyword)
+            #print(keyword)
     else:
         #timeSeries.append(str(first_day_of_week) + " - " + str(current_date))
         current_week += 1
@@ -100,5 +102,83 @@ while(first_day_of_week < end_time.date()):
     timeSeries.append(str(first_day_of_week) + " - " + str(first_day_of_week + timedelta(days=6)))
     first_day_of_week = first_day_of_week + timedelta(days=7)
 
-print(timeSeries)
+keywords = []
+counter = 0
+for i, week in enumerate(timeSeries):
+    for topics in topicSeries[i]:
+        keywords.append(topics)
+            
+keywords = list(set(keywords)) 
 
+keywordsDict = dict()
+for i, keyword in enumerate(keywords):
+    keywordsDict.update({keyword: i})
+
+# print(keywordsDict)
+topicMatrix = [[0 for _ in range(len(timeSeries))] for _ in range(len(keywords))]
+
+for i, week in enumerate(timeSeries):
+    for topics in topicSeries[i]:
+        topicMatrix[keywordsDict[topics]][i] = topicSeries[i].get(topics)
+        
+        
+        
+        
+        
+        
+        
+for i, row in enumerate(topicMatrix):    
+    
+    peaks, _ = find_peaks(row, height=3, width=1)
+    print(peaks, keywords[i])
+    
+    
+    # diff = np.diff(row)
+    # row2 = row[:-1]
+    # for i, r in enumerate(row2):
+    #     if r < 1e-9:
+    #         row2[i] = 1e-9
+        
+    # pct_change = diff / row2
+
+    
+    # spikes = np.where(pct_change > 5000)[0] + 1
+    # # print(pct_change)
+    # print("spike weeks: ", spikes)
+    
+    
+    # mean = np.mean(row)
+    # std = np.std(row)
+    # if std != 0:
+    #     z_scores = (row - mean) / std
+    #     spikes = np.where(z_scores > 2)[0]
+        
+    #     # print(len(spikes))
+    
+    #     if len(spikes) == 0:
+    #         # data.append(row)
+    #         topicMatrix[i] = [0 for _ in range(len(row))]
+    #     # print(row)
+    # else:
+    #     topicMatrix[i] = [0 for _ in range(len(row))]
+    
+    
+# print(topicMatrix) 
+    
+# print(topicSeries)
+# print("\n")
+# print(keywords)
+# print("\n")
+# print(keywordsDict)
+# print("\n")
+# print(topicMatrix)
+
+x = timeSeries
+# bottom_values = [0] * len(x)
+
+for i, row in enumerate(topicMatrix):
+    plt.plot(x, row)
+    # bottom_values = [b + v for b, v in zip(bottom_values, row)]
+
+plt.legend()
+plt.show()
