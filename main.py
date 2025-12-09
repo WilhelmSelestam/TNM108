@@ -12,6 +12,7 @@ import numpy as np
 from collections import defaultdict
 import textwrap
 from transformers import pipeline
+import json
 
 #nlp = spacy.load("en_core_web_sm")
 
@@ -20,7 +21,16 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
-data = pd.read_csv('data.csv').head(400)
+#data = pd.read_csv('data.csv').head(20)
+
+data = pd.read_csv('Social_Media_Engagement_Dataset.csv')
+
+data = data[['timestamp', 'day_of_week', 'location', 'text_content', 'engagement_rate']]
+
+data['text_content'] = data['text_content'].str.replace(r'[^A-Za-z0-9\s]', '', regex=True)
+data['text_content'] = data['text_content'].str.lower()
+
+data = data.sort_values(by=['timestamp'])
 
 #date format things
 date_format = '%Y-%m-%d %H:%M:%S'
@@ -31,40 +41,12 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 
 embedded_posts = []
 posts = []
+timestamps = []
 
 for row in data.itertuples(index=False):
     embedded_posts.append(model.encode(row.text_content))
     posts.append(row.text_content)
-
-
-#embedding
-#model = SentenceTransformer('all-MiniLM-L6-v2')
-
-# keywords = set()
-# for row in data.itertuples(index=False):
-#     for keyword in row.keywords:
-#         #print(keyword)
-#         keywords.add(keyword)
-
-# keywords = list(keywords)
-# print(keywords[95])
-  
-# keywords = [
-#     "buy car", "purchase automobile", "buy vehicle", 
-#     "apple", "banana", "buy cars", "apple fruit"
-# ]
-# embeddings = model.encode(keywords)
-
-# clusters = util.community_detection(
-#     embeddings, 
-#     threshold=0.75, 
-#     min_community_size=1
-# )
-
-# print(clusters)
-# filtered_keywords = [keywords[cluster[0]] for cluster in clusters]
-# print(filtered_keywords)
-
+    timestamps.append(row.timestamp)
 
 timeSeries = []
 topicSeries = [[]]
@@ -79,8 +61,6 @@ nr_of_weeks = math.ceil(time_span.days / 7)
 for week in range (0, nr_of_weeks):
     topicSeries.append([])
 
-#print(nr_of_weeks)
-
 current_week = 0
 week_length = timedelta(days=7)
 
@@ -89,26 +69,10 @@ counter = 0
 for row in data.itertuples(index=False):
 
     current_date = datetime.strptime(row.timestamp, date_format)
-    #print()  
-    #print(type(row.keywords))
-    # keywords2 = row.keywords.replace('[','')
-    # keywords2 = keywords2.replace(']','')
-    # keywords2 = keywords2.replace("'",'')
-    # keywords2 = keywords2.replace(',','').split()
-    #print(embedded_posts[counter])
     if current_date.date() < start_time_first_day_of_week + week_length * (current_week + 1):
-        # for keyword in keywords2:
-        #     topicSeries[current_week][keyword] = topicSeries[current_week].get(keyword, 0) + 1
-            #topicSeries[current_week].append(row)
-            #print(keyword)
         topicSeries[current_week].append(embedded_posts[counter])
     else:
-        #timeSeries.append(str(first_day_of_week) + " - " + str(current_date))
         current_week += 1
-        #topicSeries.append([row])
-        #first_day_of_week = datetime.strptime(row.timestamp, date_format) - timedelta(datetime.strptime(row.timestamp, date_format).weekday())
-        # for keyword in keywords2:
-        #     topicSeries[current_week][keyword] = topicSeries[current_week].get(keyword, 0) + 1
         topicSeries[current_week].append(embedded_posts[counter])
 
     counter+=1
@@ -121,19 +85,14 @@ while(first_day_of_week < end_time.date()):
 keywords = []
 topic_clusters = []
 counter = 0
-
-# for i, week in enumerate(timeSeries):
  
 clusters = util.community_detection(
         embedded_posts, 
         threshold=0.6, 
         min_community_size=1
 )
-#topic_clusters.append(clusters)
-
 
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-
 
 def chunk_text(text, max_chars=2000):
     """Split long text into smaller pieces."""
@@ -146,6 +105,7 @@ for cluster in clusters:
     text = ""
     for row_index in cluster:
         text += posts[row_index] + " "  # add space between posts
+        
 
     # 1) Summarize each chunk
     partial_summaries = []
@@ -169,6 +129,55 @@ final_summary = summarizer(
 topic_cluster_texts.append(final_summary)
 print(topic_cluster_texts[0])
 
+weekly_texts = [[]]
+
+for week in range (0, nr_of_weeks):
+    weekly_texts.append([])
+    for i, cluster in enumerate(clusters):
+        weekly_texts[week].append([])
+
+for i, cluster in enumerate(clusters):
+    for row_index in cluster:
+        #print(i, " : ", row_index)
+        current_timestamp = datetime.strptime(timestamps[row_index], date_format)
+        current_text = posts[row_index]
+        #print(current_text)
+        
+        week_number = math.floor((current_timestamp.date() - start_time_first_day_of_week).days / 7)
+        
+
+        prev_text = str(weekly_texts[week_number][i]) + str(" ")
+        if(prev_text == "[] "):
+            prev_text = ""
+        weekly_texts[week_number][i] = str(prev_text + str(current_text))
+        
+        #print(weekly_texts[week_number][i])
+            
+
+#print(weekly_texts[0][0])
+
+
+sentiment_pipeline = pipeline("sentiment-analysis")
+
+sentimented_posts = []
+
+for i, week in enumerate(weekly_texts):
+    sentimented_posts.append(sentiment_pipeline(weekly_texts[i]))
+
+#print(sentimented_posts)
+
+data.to_json('dataset.json', indent=4)
+
+with open('topic_cluster_texts.json', 'w') as f:
+    json.dump(topic_cluster_texts, f)
+
+with open('clusters.json', 'w') as f:
+    json.dump(clusters, f)
+
+with open('sentimented_posts_per_week_per_cluster.json', 'w') as f:
+    json.dump(sentimented_posts, f)
+
+#print(weekly_texts)
     # for topics in topicSeries[i]:
         
         # grouped_posts = [posts[cluster[0]] for cluster in clusters]
