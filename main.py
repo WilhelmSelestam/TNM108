@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import math
 from sentence_transformers import SentenceTransformer, util
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 # from scipy.signal import find_peaks
 from collections import defaultdict
@@ -15,6 +15,8 @@ from transformers import pipeline
 import json
 
 #nlp = spacy.load("en_core_web_sm")
+
+print("Loading data...")
 
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.max_rows', None)
@@ -129,12 +131,15 @@ final_summary = summarizer(
 topic_cluster_texts.append(final_summary)
 print(topic_cluster_texts[0])
 
-weekly_texts = [[]]
+# Calculate correct number of weeks based on the week_number logic
+max_week_number = math.floor((end_time.date() - start_time_first_day_of_week).days / 7)
+weekly_texts = []
 
-for week in range (0, nr_of_weeks):
-    weekly_texts.append([])
-    for i, cluster in enumerate(clusters):
-        weekly_texts[week].append([])
+for week in range(max_week_number + 1):
+    current_week_clusters = []
+    for _ in range(len(clusters)):
+        current_week_clusters.append([])
+    weekly_texts.append(current_week_clusters)
 
 for i, cluster in enumerate(clusters):
     for row_index in cluster:
