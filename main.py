@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import math
 from sentence_transformers import SentenceTransformer, util
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 # from scipy.signal import find_peaks
 from collections import defaultdict
@@ -15,6 +15,8 @@ from transformers import pipeline
 import json
 
 #nlp = spacy.load("en_core_web_sm")
+
+print("Loading data...")
 
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.max_rows', None)
@@ -93,76 +95,170 @@ clusters = util.community_detection(
 )
 
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+# sentiment_pipeline = pipeline(
+#     "sentiment-analysis", 
+#     model="distilbert-base-uncased-finetuned-sst-2-english"
+# )
 
-def chunk_text(text, max_chars=2000):
+# def chunk_text(text, max_chars=1024):
+#     """Split long text into smaller pieces."""
+#     for i in range(0, len(text), max_chars):
+#         yield text[i:i+max_chars]
+
+# topic_cluster_texts = []
+
+# for cluster in clusters:
+#     text = ""
+#     for row_index in cluster:
+#         text += posts[row_index] + " "  # add space between posts
+        
+
+#     # 1) Summarize each chunk
+#     partial_summaries = []
+#     for chunk in chunk_text(text):
+#         summary = summarizer(
+#             chunk,
+#             max_length=80,    # length of each chunk summary
+#             min_length=20,
+#             do_sample=False
+#         )[0]["summary_text"]
+#         partial_summaries.append(summary)
+
+#         combined = " ".join(partial_summaries)
+#     final_summary = summarizer(
+#         combined,
+#         max_length=50,
+#         min_length=10,
+#         do_sample=False
+#     )[0]["summary_text"]
+
+#     topic_cluster_texts.append(final_summary)
+
+# print(topic_cluster_texts[0])
+
+stage1_inputs = []       # List of all text chunks from all clusters
+chunk_to_cluster_map = [] # Keeps track of which cluster a chunk belongs to
+
+def chunk_text(text, max_chars=1024):
     """Split long text into smaller pieces."""
     for i in range(0, len(text), max_chars):
         yield text[i:i+max_chars]
 
-topic_cluster_texts = []
-
-for cluster in clusters:
-    text = ""
+# Iterate through clusters to prepare inputs
+for cluster_idx, cluster in enumerate(clusters):
+    # Combine posts in the cluster
+    full_text = ""
     for row_index in cluster:
-        text += posts[row_index] + " "  # add space between posts
-        
+        full_text += posts[row_index] + " "
+    
+    # split into chunks and add to our flat list
+    for chunk in chunk_text(full_text):
+        stage1_inputs.append(chunk)
+        chunk_to_cluster_map.append(cluster_idx)
 
-    # 1) Summarize each chunk
-    partial_summaries = []
-    for chunk in chunk_text(text):
-        summary = summarizer(
-            chunk,
-            max_length=80,    # length of each chunk summary
-            min_length=20,
-            do_sample=False
-        )[0]["summary_text"]
-        partial_summaries.append(summary)
+print(f"Total chunks to summarize: {len(stage1_inputs)}")
 
-combined = " ".join(partial_summaries)
-final_summary = summarizer(
-    combined,
+# --- STAGE 1: BATCH GENERATE PARTIAL SUMMARIES ---
+# This runs the model on the massive list of chunks
+print("Running Stage 1 summarization (Partial)...")
+stage1_results = summarizer(
+    stage1_inputs, 
+    max_length=80, 
+    min_length=20, 
+    do_sample=False, 
+    batch_size=8,
+    truncation=True
+)
+
+# --- RE-GROUPING ---
+# Group the partial summaries back to their respective clusters
+cluster_partial_summaries = defaultdict(list)
+for i, result in enumerate(stage1_results):
+    cluster_idx = chunk_to_cluster_map[i]
+    cluster_partial_summaries[cluster_idx].append(result['summary_text'])
+
+# --- STAGE 2: BATCH GENERATE FINAL SUMMARIES ---
+# Now we combine the partial summaries and do one final pass
+print("Running Stage 2 summarization (Final)...")
+
+stage2_inputs = []
+# Ensure we process clusters in order (0, 1, 2...)
+sorted_cluster_indices = sorted(cluster_partial_summaries.keys())
+
+for cluster_idx in sorted_cluster_indices:
+    # Join all partial summaries for this cluster
+    combined_text = " ".join(cluster_partial_summaries[cluster_idx])
+    if len(combined_text) > 4000:
+        combined_text = combined_text[:4000]
+    stage2_inputs.append(combined_text)
+
+# Run final batch summarization
+stage2_results = summarizer(
+    stage2_inputs,
     max_length=50,
     min_length=10,
-    do_sample=False
-)[0]["summary_text"]
+    do_sample=False,
+    batch_size=8,
+    truncation=True
+)
 
-topic_cluster_texts.append(final_summary)
-print(topic_cluster_texts[0])
+# Extract final texts
+topic_cluster_texts = [res['summary_text'] for res in stage2_results]
 
-weekly_texts = [[]]
+sentiment_pipeline = pipeline(
+    "sentiment-analysis", 
+    model="distilbert-base-uncased-finetuned-sst-2-english",
+    device=0
+)
 
-for week in range (0, nr_of_weeks):
-    weekly_texts.append([])
-    for i, cluster in enumerate(clusters):
-        weekly_texts[week].append([])
+max_week_number = math.floor((end_time.date() - start_time_first_day_of_week).days / 7)
+organized_data = defaultdict(lambda: defaultdict(list))
 
 for i, cluster in enumerate(clusters):
     for row_index in cluster:
-        #print(i, " : ", row_index)
         current_timestamp = datetime.strptime(timestamps[row_index], date_format)
         current_text = posts[row_index]
-        #print(current_text)
         
         week_number = math.floor((current_timestamp.date() - start_time_first_day_of_week).days / 7)
         
+        # Store individual posts in a list rather than concatenating
+        organized_data[week_number][i].append(current_text)
 
-        prev_text = str(weekly_texts[week_number][i]) + str(" ")
-        if(prev_text == "[] "):
-            prev_text = ""
-        weekly_texts[week_number][i] = str(prev_text + str(current_text))
+# 4. Run Sentiment Analysis and Calculate Averages
+weekly_sentiment_scores = []
+
+print("Running sentiment analysis on batches...")
+
+# Initialize the result structure
+for week in range(max_week_number + 1):
+    current_week_scores = []
+    
+    for cluster_idx in range(len(clusters)):
+        posts_in_cluster = organized_data[week][cluster_idx]
         
-        #print(weekly_texts[week_number][i])
+        if not posts_in_cluster:
+            # No posts for this cluster in this week
+            current_week_scores.append(None) 
+            continue
             
-
-#print(weekly_texts[0][0])
-
-
-sentiment_pipeline = pipeline("sentiment-analysis")
-
-sentimented_posts = []
-
-for i, week in enumerate(weekly_texts):
-    sentimented_posts.append(sentiment_pipeline(weekly_texts[i]))
+        # Run pipeline on the LIST of posts (Batch Processing)
+        # batch_size=16 or 32 is usually good for standard GPUs
+        results = sentiment_pipeline(posts_in_cluster, batch_size=16, truncation=True, max_length=512)
+        
+        # Convert results to a numerical score
+        # Logic: POSITIVE = score, NEGATIVE = -score
+        scores = []
+        for res in results:
+            score_val = res['score']
+            if res['label'] == 'NEGATIVE':
+                score_val = -score_val
+            scores.append(score_val)
+            
+        # Calculate average for the week
+        avg_score = np.mean(scores)
+        current_week_scores.append(avg_score)
+        
+    weekly_sentiment_scores.append(current_week_scores)
 
 #print(sentimented_posts)
 
@@ -175,7 +271,7 @@ with open('clusters.json', 'w') as f:
     json.dump(clusters, f)
 
 with open('sentimented_posts_per_week_per_cluster.json', 'w') as f:
-    json.dump(sentimented_posts, f)
+    json.dump(weekly_sentiment_scores, f)
 
 #print(weekly_texts)
     # for topics in topicSeries[i]:
