@@ -273,6 +273,7 @@ with open('clusters.json', 'w') as f:
 with open('sentimented_posts_per_week_per_cluster.json', 'w') as f:
     json.dump(weekly_sentiment_scores, f)
 
+
 #print(weekly_texts)
     # for topics in topicSeries[i]:
         
