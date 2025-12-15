@@ -69,27 +69,15 @@ function SingleTopicTooltip({
     );
 }
 
-// const chartData = [
-//   { month: "January", desktop: 186, mobile: 80 },
-//   { month: "February", desktop: 305, mobile: 200 },
-//   { month: "March", desktop: 237, mobile: 120 },
-//   { month: "April", desktop: 73, mobile: 190 },
-//   { month: "May", desktop: 209, mobile: 130 },
-//   { month: "June", desktop: 214, mobile: 140 },
-// ]
 
-// const chartConfig = {
-//   desktop: {
-//     label: "Desktop",
-//     color: "#2563eb",
-//   },
-//   mobile: {
-//     label: "Mobile",
-//     color: "#60a5fa",
-//   },
-// } satisfies ChartConfig
 
-export function SentimentChart() {
+export function SentimentChart({
+    topicId,
+    setTopicId,
+}: {
+    topicId: string | null;
+    setTopicId: React.Dispatch<React.SetStateAction<string | null>>;
+}) {
     const [sentimentMatrix, setSentimentMatrix] = React.useState<
         (number | null)[][]
     >([]);
@@ -103,25 +91,7 @@ export function SentimentChart() {
             .then((r) => r.json())
             .then(setWeeks);
     }, []);
-    // return (
-    //   <ChartContainer config={chartConfig} className="min-h-[200px] w-full">
-    //     <LineChart accessibilityLayer data={chartData}>
-    //       <ChartTooltip content={<ChartTooltipContent />} />
-    //       <XAxis
-    //         dataKey="month"
-    //         tickLine={false}
-    //         tickMargin={10}
-    //         axisLine={true}
-    //         tickFormatter={(value) => value.slice(0, 3)}
-    //       />
-    //       <YAxis label={{ position: "insideBottomRight" }} />
-    //       <ChartLegend content={<ChartLegendContent />} />
-    //       <CartesianGrid vertical={false} />
-    //       <Line dataKey="desktop" fill="var(--color-desktop)" radius={4} />
-    //       <Line dataKey="mobile" fill="var(--color-mobile)" radius={4} />
-    //     </LineChart>
-    //   </ChartContainer>
-    // )
+  
 
     //these run once to load data
 
@@ -132,19 +102,14 @@ export function SentimentChart() {
             .catch(console.error);
     }, []);
 
-    // Load chart data
-    // React.useEffect(() => {
-    //     fetch("/weekly_topic_counts.json")
-    //         .then((r) => r.json())
-    //         .then(setData);
-    // }, []);
-
     // Load topic summaries
     React.useEffect(() => {
         fetch("/topic_cluster_texts.json")
             .then((r) => r.json())
             .then(setSummaries);
     }, []);
+
+    // topicId ? topicId : ""
 
     const sentimentData = React.useMemo(() => {
         if (!weeks.length || !sentimentMatrix.length) return [];
@@ -164,12 +129,14 @@ export function SentimentChart() {
     }, [weeks, sentimentMatrix]);
 
     const data = sentimentData;
+    const MAX_TOPICS = 10;
 
     const { config, topicKeys } = React.useMemo(() => {
         const first = data?.[0];
-        const keys = first
+        const allKeys = first
             ? Object.keys(first).filter((k) => k.startsWith("topic_"))
             : [];
+        const keys = allKeys.slice(0, MAX_TOPICS);
 
         const palette = [
             "hsl(221 83% 53%)",
@@ -216,15 +183,15 @@ export function SentimentChart() {
                         content={(props) => (
                             <SingleTopicTooltip
                                 {...props}
-                                hoveredTopic={hoveredTopic}
+                                hoveredTopic={topicId}
                                 sentimentMatrix={sentimentMatrix}
                             />
                         )}
                     />
                     <ChartLegend content={<ChartLegendContent />} />
                     {topicKeys.map((key) => {
-                        const isActive = hoveredTopic === key;
-                        const isDimmed = hoveredTopic && !isActive;
+                        const isActive = topicId === key;
+                        const isDimmed = topicId && !isActive;
 
                         return (
                             <Line
@@ -232,11 +199,12 @@ export function SentimentChart() {
                                 type="monotone"
                                 dataKey={key}
                                 stroke={`var(--color-${key})`}
-                                strokeWidth={isActive ? 3 : 2}
+                                strokeWidth={isActive ? 3 : 3}
                                 strokeOpacity={isDimmed ? 0.2 : 1}
                                 dot={false}
-                                onMouseEnter={() => setHoveredTopic(key)}
-                                onMouseLeave={() => setHoveredTopic(null)}
+                                // onMouseEnter={() => setHoveredTopic(key)}
+                                // onMouseLeave={() => setHoveredTopic(null)}
+                                onMouseDown={() => setTopicId(key)}
                             />
                         );
                     })}
@@ -244,7 +212,7 @@ export function SentimentChart() {
             </ChartContainer>
 
             {/*Summary box */}
-            <div className="rounded-lg border bg-muted/30 p-4 text-sm min-h-[4rem]">
+            {/* <div className="rounded-lg border bg-muted/30 p-4 text-sm min-h-[4rem]">
                 {hoveredSummary ? (
                     <>
                         <div className="font-medium mb-1">
@@ -259,7 +227,7 @@ export function SentimentChart() {
                         Hover over a topic line to see its summary :D
                     </span>
                 )}
-            </div>
+            </div> */}
         </div>
     );
 }

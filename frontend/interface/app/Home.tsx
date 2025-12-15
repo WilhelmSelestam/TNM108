@@ -13,7 +13,7 @@ export default function Home() {
 
     return (
         <>
-            <RadioGroup
+            {/* <RadioGroup
                 defaultValue="topic"
                 onValueChange={(v) => setShowTopicChart(v === "topic")}
             >
@@ -26,9 +26,9 @@ export default function Home() {
                     <RadioGroupItem value="sentiment" id="sentiment" />
                     <Label htmlFor="sentiment">Sentiment trends chart</Label>
                 </div>
-            </RadioGroup>
+            </RadioGroup> */}
             <div className="max-w-300 p-10">
-                {showTopicChart ? <TopicChart /> : <SentimentChart />}
+                <TopicChart />
             </div>
         </>
     );

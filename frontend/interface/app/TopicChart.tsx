@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { LineChart, Line, CartesianGrid, XAxis, YAxis } from "recharts";
+import { SentimentChart } from "./SentimentChart";
 
 import {
     ChartContainer,
@@ -22,23 +23,31 @@ function formatWeek(iso: string) {
 function SingleTopicTooltip({
     active,
     payload,
-    hoveredTopic,
+    selectedTopic: selectedTopic,
+    hoveredTopic: hoveredTopic,
     sentimentMatrix,
+    keyWords,
 }: {
     active?: boolean; //true when to render
     payload?: any[]; //data for all topics at the hovered week
-    hoveredTopic: string | null; //which topic is hovered
+    selectedTopic: string | null; //which topic is hovered
+    hoveredTopic: string | null;
     sentimentMatrix: (number | null)[][];
+    keyWords?: Record<string, string>;
 }) {
     //do nothing
-    if (!active || !payload?.length || !hoveredTopic) return null;
+    if (!active || !payload?.length || !selectedTopic) return null;
 
     //takes the data for the hovered topic
-    const item = payload.find((p) => p.dataKey === hoveredTopic);
+    const toSelect = hoveredTopic ? hoveredTopic : selectedTopic;
+
+    const item = payload.find((p) => p.dataKey === toSelect);
     if (!item) return null;
 
     //get index from topic_index and make it into a number
-    const topicIdx = Number(hoveredTopic.replace("topic_", ""));
+    const topicIdx = Number(selectedTopic.replace("topic_", ""));
+
+    const keyword = keyWords ? keyWords[selectedTopic] : null;
 
     // get week index by finding the hovered row in the chart
     const weekIso: string = item.payload.week;
@@ -53,7 +62,7 @@ function SingleTopicTooltip({
 
     return (
         <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow">
-            <div className="font-medium">{item.name}</div>
+            <div className="font-medium">{item.name + " " + keyword}</div>
             <div className="font-mono tabular-nums">
                 {item.value.toLocaleString()} posts
             </div>
@@ -69,14 +78,19 @@ function SingleTopicTooltip({
         </div>
     );
 }
+const MAX_TOPICS = 10;
 
 export function TopicChart() {
     const [data, setData] = React.useState<any[]>([]);
     const [summaries, setSummaries] = React.useState<string[]>([]);
+    const [selectedTopic, setSelectedTopic] = React.useState<string | null>(
+        null
+    );
     const [hoveredTopic, setHoveredTopic] = React.useState<string | null>(null);
     const [sentimentMatrix, setSentimentMatrix] = React.useState<
         (number | null)[][]
     >([]);
+    const [keywords, setKeywords] = React.useState<Record<string, string>>({});
 
     //these run once to load data
 
@@ -101,11 +115,22 @@ export function TopicChart() {
             .then(setSummaries);
     }, []);
 
+    // Load top keywords for legend
+    React.useEffect(() => {
+        fetch("/top_keywords.json")
+            .then((r) => r.json())
+            .then(setKeywords);
+    }, []);
+
+    console.log("Page loaded");
+
     const { config, topicKeys } = React.useMemo(() => {
         const first = data?.[0];
-        const keys = first
+        const allKeys = first
             ? Object.keys(first).filter((k) => k.startsWith("topic_"))
             : [];
+
+        const keys = allKeys.slice(0, MAX_TOPICS);
 
         const palette = [
             "hsl(221 83% 53%)",
@@ -118,22 +143,39 @@ export function TopicChart() {
 
         const cfg: ChartConfig = {};
         keys.forEach((k, i) => {
+            // Use the keyword if available, taking the first line if there are newlines
+            const rawLabel = keywords[k];
+            const label =
+                `Topic ${i}` +
+                ": " +
+                rawLabel.charAt(0).toUpperCase() +
+                rawLabel.slice(1);
+
             cfg[k] = {
-                label: `Topic ${i}`,
+                label: label,
                 color: palette[i % palette.length],
             };
         });
 
         return { config: cfg, topicKeys: keys };
-    }, [data]);
+    }, [data, keywords]);
 
     if (!data.length) return <div>Loading…</div>;
+
+    const selectedIndex = selectedTopic
+        ? Number(selectedTopic.replace("topic_", ""))
+        : null;
+    const selectedSummary =
+        selectedIndex !== null ? summaries[selectedIndex] : null;
 
     const hoveredIndex = hoveredTopic
         ? Number(hoveredTopic.replace("topic_", ""))
         : null;
     const hoveredSummary =
         hoveredIndex !== null ? summaries[hoveredIndex] : null;
+    // const handleChildInput = (value: string) => {
+    //     setHoveredTopic(value);
+    //   }
 
     return (
         <div className="space-y-4">
@@ -155,15 +197,17 @@ export function TopicChart() {
                         content={(props) => (
                             <SingleTopicTooltip
                                 {...props}
+                                selectedTopic={selectedTopic}
                                 hoveredTopic={hoveredTopic}
                                 sentimentMatrix={sentimentMatrix}
+                                keyWords={keywords}
                             />
                         )}
                     />
                     <ChartLegend content={<ChartLegendContent />} />
                     {topicKeys.map((key) => {
-                        const isActive = hoveredTopic === key;
-                        const isDimmed = hoveredTopic && !isActive;
+                        const isActive = selectedTopic === key;
+                        const isDimmed = selectedTopic && !isActive;
 
                         return (
                             <Line
@@ -171,11 +215,12 @@ export function TopicChart() {
                                 type="monotone"
                                 dataKey={key}
                                 stroke={`var(--color-${key})`}
-                                strokeWidth={isActive ? 3 : 2}
+                                strokeWidth={isActive ? 3 : 3}
                                 strokeOpacity={isDimmed ? 0.2 : 1}
                                 dot={false}
                                 onMouseEnter={() => setHoveredTopic(key)}
                                 onMouseLeave={() => setHoveredTopic(null)}
+                                onMouseDown={() => setSelectedTopic(key)}
                             />
                         );
                     })}
@@ -184,18 +229,22 @@ export function TopicChart() {
 
             {/*Summary box */}
             <div className="rounded-lg border bg-muted/30 p-4 text-sm min-h-[4rem]">
-                {hoveredSummary ? (
+                {selectedSummary ? (
                     <>
                         <div className="font-medium mb-1">
-                            {config[hoveredTopic!]?.label}
+                            {config[selectedTopic!]?.label}
                         </div>
                         <p className="text-muted-foreground leading-relaxed">
-                            {hoveredSummary}
+                            {selectedSummary}
                         </p>
+                        <SentimentChart
+                            topicId={selectedTopic}
+                            setTopicId={setSelectedTopic}
+                        />
                     </>
                 ) : (
                     <span className="text-muted-foreground">
-                        Hover over a topic line to see its summary :D
+                        select a topic line to see its summary :D
                     </span>
                 )}
             </div>
